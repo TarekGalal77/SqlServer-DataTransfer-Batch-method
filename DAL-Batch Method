@@ -1,0 +1,184 @@
+using System.Data;
+using System.Data.SqlClient;
+using System.Data.SqlTypes;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace Opex_OEE.Layers.DAL
+{
+    public class MonitoringDBCls
+    {
+        private readonly string _connectionString;
+        private readonly SqlDataAdapter _adapter;
+        private readonly SqlCommandBuilder _commandBuilder;
+        CodingClass coding = new CodingClass();
+        LossesCls lossesCls = new LossesCls();
+        
+
+        public MonitoringDBCls(string connectionString)
+        {
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new InvalidOperationException("Connection string cannot be null or empty.");
+            }
+
+            _connectionString = connectionString;
+
+            // Initialize adapter and command builder
+            _adapter = new SqlDataAdapter();
+            _commandBuilder = new SqlCommandBuilder(_adapter);
+        }
+
+        public DataTable GetDailyMonitoringData(int sheetId, string mainLvl)
+        {
+            DataTable dataTable = new DataTable();
+
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                string query = @"SELECT id, StrtTime, FnshTime, ScndLvl, Loss, Responsibility 
+                             FROM [dbo].[DailyMonitoringTbl] 
+                             WHERE DaliyTaskid = @SheetId AND MainLvl = @MainLvl";
+
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.Add("@SheetId", SqlDbType.Int).Value = sheetId;
+                    command.Parameters.Add("@MainLvl", SqlDbType.NVarChar).Value = mainLvl;
+
+                    _adapter.SelectCommand = command;
+
+                    connection.Open();
+                   
+                    _adapter.Fill(dataTable);
+                }
+            }
+
+            return dataTable;
+        }
+
+        public int InsertRecord(DailyMonitoringDTO data, int sheetId, string mainLvl,string Machine, DateTime FollowUpDate)
+        {
+            
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(@"
+                        INSERT INTO [dbo].[DailyMonitoringTbl] 
+                        (StrtTime, FnshTime, ScndLvl, Loss, Responsibility, DaliyTaskid, MainLvl,ScrapQntity,FollowUpDate,planned) 
+                        VALUES (@StartTime, @FinishTime, @SecondLevel, @Loss, @Responsibility, @SheetId, @MainLvl,@ScrapQntity,@FollowUpDate,@planned);
+                        SELECT SCOPE_IDENTITY();",
+                        connection))
+                    {
+                        AddParameters(command, data, sheetId, mainLvl,Machine,FollowUpDate);
+                        return Convert.ToInt32(command.ExecuteScalar());
+                    }
+                }
+            try
+            { }
+            catch (Exception ex)
+            {
+                throw new DALException("Error inserting record", ex);
+            }
+        }
+
+        public void UpdateRecord(DailyMonitoringDTO data, int sheetId, string mainLvl,string Machine,DateTime FollowUpDate)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                   
+                    connection.Open();
+                    using (var command = new SqlCommand(@"
+                        UPDATE [dbo].[DailyMonitoringTbl] 
+                        SET StrtTime = @StartTime, 
+                            FnshTime = @FinishTime, 
+                            ScndLvl = @SecondLevel, 
+                            Loss = @Loss, 
+                            Responsibility = @Responsibility, 
+                            FollowUpDate=@FollowUpDate,
+                            planned=@planned
+                        WHERE id = @Id AND DaliyTaskid = @SheetId AND MainLvl = @MainLvl", connection))
+                    {
+                        AddParameters(command, data, sheetId, mainLvl,Machine,FollowUpDate);
+                        command.Parameters.AddWithValue("@Id", data.id).SourceVersion = DataRowVersion.Original;
+                        command.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new DALException("Error updating record", ex);
+            }
+        }
+
+        public void DeleteRecord(DailyMonitoringDTO data)
+        {
+
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+                    using (var command = new SqlCommand(@"
+            DELETE FROM [dbo].[DailyMonitoringTbl] 
+            WHERE id = @Id ", connection))
+                    {
+                        // Add parameters to the command
+                        command.Parameters.AddWithValue("@Id", data.id);
+                        command.ExecuteNonQuery();
+                        MessageBox.Show("Record deleting","Info",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new DALException("Error deleting record", ex);
+            }
+        }
+
+        private object ValidateDateTime(DateTime date)
+        {
+            MessageBox.Show(date.ToString());
+            return date < (DateTime)SqlDateTime.MinValue ? (object)DBNull.Value : date;
+            
+        }
+        
+        private void AddParameters(SqlCommand command, DailyMonitoringDTO data, int sheetId, string mainLvl,string Machine,DateTime FollowUpDate)
+        {
+            TimeCls timeCls = new TimeCls();
+            command.Parameters.AddWithValue("@StartTime", ValidateDateTime(timeCls.AdjustDateToToday(data.StrtTime,FollowUpDate)));
+            command.Parameters.AddWithValue("@FinishTime", ValidateDateTime(timeCls.AdjustDateToToday(data.FnshTime, FollowUpDate)));
+
+            command.Parameters.AddWithValue("@SecondLevel", string.IsNullOrEmpty(coding.getTarmeezID(data.ScndLvl)) ? (object)DBNull.Value : coding.getTarmeezID(data.ScndLvl));
+            command.Parameters.AddWithValue("@Loss", string.IsNullOrEmpty(lossesCls.GetLossId(Machine, data.Loss).ToString()) ? (object)DBNull.Value : lossesCls.GetLossId(Machine, data.Loss).ToString());
+            command.Parameters.AddWithValue("@Responsibility", string.IsNullOrEmpty(coding.getTarmeezID(data.Responsibility)) ? (object)DBNull.Value : coding.getTarmeezID(data.Responsibility));
+            command.Parameters.AddWithValue("@FollowUpDate", ValidateDateTime(FollowUpDate));
+            command.Parameters.AddWithValue("@planned", string.IsNullOrEmpty(lossesCls.GetLossPlanned(Machine, data.Loss).ToString()) ? (object)DBNull.Value : lossesCls.GetLossPlanned(Machine, data.Loss).ToString());
+            command.Parameters.AddWithValue("@ScrapQntity", "0");
+            command.Parameters.AddWithValue("@SheetId", sheetId);
+            command.Parameters.AddWithValue("@MainLvl", mainLvl);
+        }
+
+        public void SaveChanges(DataTable changes)
+        {
+            try
+            {
+                _adapter.Update(changes);
+            }
+            catch (Exception ex)
+            {
+                throw new DALException("Error saving changes", ex);
+            }
+        }
+
+
+        public class DALException : Exception
+        {
+            public DALException(string message, Exception innerException)
+                : base(message, innerException) { }
+        }
+    }
+
+}

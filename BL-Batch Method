@@ -1,0 +1,362 @@
+using Opex_OEE.Layers.DAL;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using static Opex_OEE.Layers.DAL.MonitoringDBCls;
+
+namespace Opex_OEE.Layers.BL
+{
+    //DailyMonitoringBLL
+    public class MonitoringCls
+    {
+        private readonly MonitoringDBCls _dal;
+        private readonly int _sheetId;
+        private readonly string _mainLvl;
+        private readonly string _machine;
+        private readonly DateTime _FollowUpDate;
+        private readonly string _Planned;
+        private DataTable _dataTable;
+        CodingClass coding = new CodingClass();
+        MachineItemsTree MachineTree = new MachineItemsTree();
+        LossesCls lossesCls = new LossesCls();
+        TimeCls timeCls = new TimeCls();
+        string connectionString;
+        public MonitoringCls( int sheetId, string mainLvl, string machine, DateTime FollowUpDate)
+        {
+            connectionString = "Server=DESKTOP-CFV71PJ; Initial Catalog = OpexOEE; Integrated Security = True";
+              _dal = new MonitoringDBCls(connectionString);
+            _sheetId = sheetId;
+            _mainLvl = coding.GetTarmeezGroupID(mainLvl).ToString();
+            _machine = machine;
+            _FollowUpDate = FollowUpDate;
+            
+            // MachineTree.GetSKUMachineid().ToString();
+        }
+        public List<DailyMonitoringDTO> GetAllRecords()
+        {
+            try
+            {
+                var _dataTable = _dal.GetDailyMonitoringData(_sheetId, _mainLvl);
+               
+                return ConvertDataTableToList(_dataTable);
+            }
+            catch (DALException ex)
+            {
+                throw new BLLException("Failed to retrieve monitoring records", ex);
+            }
+        }
+        public DailyMonitoringDTO InsertRecord(DailyMonitoringDTO data)
+        {
+            // Validate data
+            //  ValidateMonitoringData(data);
+
+            try
+            {
+                 _dal.InsertRecord(data, _sheetId, _mainLvl,_machine,_FollowUpDate);
+                //int newId =
+                //  data.id = newId;
+
+                return data;
+            }
+            catch (MonitoringDBCls.DALException ex)
+            {
+                throw new BLLException("Failed to insert monitoring record", ex);
+            }
+        }
+        public void UpdateRecord(DailyMonitoringDTO data)
+        {
+            // Validate data
+           // ValidateMonitoringData(data);
+
+            try
+            {
+                _dal.UpdateRecord(data, _sheetId, _mainLvl, _machine,_FollowUpDate);
+              
+            }
+            catch (DALException ex)
+            {
+                throw new BLLException("Failed to update monitoring record", ex);
+            }
+        }
+        public void DeleteRecord(DailyMonitoringDTO data)
+        {
+            // Validate data
+            // ValidateMonitoringData(data);
+
+            try
+            {
+                _dal.DeleteRecord(data);
+
+            }
+            catch (DALException ex)
+            {
+                throw new BLLException("Failed to Delete monitoring record", ex);
+            }
+        }
+        private List<DailyMonitoringDTO> ConvertDataTableToList(DataTable dt)
+        {
+            var list = new List<DailyMonitoringDTO>();
+            try { 
+            foreach (DataRow row in dt.Rows)
+            {
+                var dto = new DailyMonitoringDTO
+                {
+                    id =Convert.ToInt32(row["id"]),
+                    StrtTime = timeCls.ToDateTime((TimeSpan)row["StrtTime"]),
+                    FnshTime = timeCls.ToDateTime((TimeSpan)row["FnshTime"]),
+                    ScndLvl = coding.getTarmeezName(row.Field<string>("ScndLvl")),
+                    Loss = lossesCls.GetLossName(row["Loss"].ToString()),
+                    Responsibility = coding.getTarmeezName(row.Field<string>("Responsibility"))
+
+                };
+                list.Add(dto);
+            }
+            }
+            catch(Exception)
+            {
+
+            }
+
+            return list;
+        }
+
+        public void SaveChanges(List<DailyMonitoringDTO> modifiedRecords)
+        {
+            foreach (var record in modifiedRecords)
+            {
+                
+                switch (record.RowState)
+                {
+                    case DataRowState.Added:
+                        InsertRecord(record);
+                        break;
+
+                    case DataRowState.Modified:
+
+                        UpdateRecord(record);
+                        break;
+
+                    case DataRowState.Deleted:
+
+                        DeleteRecord(record);
+                        break;
+                }
+            }
+
+         
+        }       
+    }
+
+    public class BLLException : Exception
+        {
+            public BLLException(string message) : base(message) { }
+            public BLLException(string message, Exception innerException)
+                : base(message, innerException) { }
+        }
+   public class DailyMonitoringDTO : INotifyPropertyChanged
+   {
+        private int _id;
+        private DateTime _startTime;
+        private DateTime _finishTime;
+        private string _secondLevel;
+        private string _loss;
+        private string _responsibility;
+        private DataRowState _RowState; 
+
+        public int id
+        {
+            get => _id;
+            set
+            {
+                if (_id != value)
+                {
+                    _id = value;
+                    OnPropertyChanged(nameof(id));
+                }
+            }
+        }
+        public DateTime StrtTime
+        {
+            get => _startTime;
+            set
+            {
+                if (_startTime != value)
+                {
+                    _startTime = value;
+                    OnPropertyChanged(nameof(StrtTime));
+                }
+            }
+        }
+        public DateTime FnshTime
+        {
+            get => _finishTime;
+            set
+            {
+                if (_finishTime != value)
+                {
+                    _finishTime = value;
+                    OnPropertyChanged(nameof(FnshTime));
+                }
+            }
+        }
+        public string ScndLvl
+        {
+            get => _secondLevel;
+            set
+            {
+                if (_secondLevel != value)
+                {
+                    _secondLevel = value;
+                   OnPropertyChanged(nameof(ScndLvl));
+                }
+            }
+        }
+        public string Loss
+        {
+            get => _loss;
+            set
+            {
+                if (_loss != value)
+                {
+                    _loss = value;
+                    OnPropertyChanged(nameof(Loss));
+                }
+            }
+        }
+        public string Responsibility
+        {
+            get => _responsibility;
+            set
+            {
+                if (_responsibility != value)
+                {
+                    _responsibility = value;
+                    OnPropertyChanged(nameof(Responsibility));
+                }
+            }
+        }
+        public DataRowState RowState 
+        {
+            get => _RowState;
+            set
+            {
+                if (_RowState != value)
+                {
+                    _RowState = value;
+                    OnPropertyChanged(nameof(RowState));
+                 }
+            }
+         }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+   }
+}
+    /*
+       private void btnConvertToDataTable()
+       {
+           // Get the BindingList<T> from GridControl
+           if (grdCtrl_Interupt.DataSource is BindingList<MonitoringEntry> bindingList)
+           {
+               DataTable dt = ConvertBindingListToDataTable(bindingList);
+
+               // Example: Show DataTable content in MessageBox (for testing)
+               string result = string.Join("\n", dt.AsEnumerable()
+                   .Select(row => string.Join(", ", row.ItemArray)));
+
+               MessageBox.Show(result, "Converted DataTable");
+           }
+           else
+           {
+               MessageBox.Show("DataSource is not a BindingList<OeeRecord>.");
+           }
+       }
+       public DataTable ConvertBindingListToDataTable<T>(BindingList<T> list)
+       {
+           DataTable table = new DataTable(typeof(T).Name);
+           PropertyInfo[] properties = typeof(T).GetProperties();
+
+           foreach (var prop in properties)
+           {
+               table.Columns.Add(prop.Name, Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType);
+           }
+
+           foreach (var item in list)
+           {
+               object[] values = properties.Select(prop => prop.GetValue(item, null) ?? DBNull.Value).ToArray();
+               table.Rows.Add(values);
+           }
+           monitoringCls.SaveChanges(table,Txt_Mchne.Text);
+           return table;
+       }
+       */
+
+
+    /*  CodingClass coding = new CodingClass();
+      TimeCls timeCls = new TimeCls();
+      LossesCls LossesCls = new LossesCls();
+      private MonitoringDBCls _MonitoringDB;
+      public MonitoringCls(string connectionString)
+      {
+          _MonitoringDB = new MonitoringDBCls(connectionString);
+      }
+
+      public DataTable LoadData(string Sheetid, string MainLoss)
+      {
+       //   DataTable Z = dailyMonitoringCls.GetDailyTaskInfo(sheetId, MainLoss);
+          return _MonitoringDB.GetData(Sheetid, MainLoss);
+      }
+      public int SaveChanges(DataTable dataTable,string Machine)
+      {
+          DataTable H = new DataTable();
+          H.Columns.Add("StrtTime", typeof(TimeSpan));
+          H.Columns.Add("FnshTime", typeof(TimeSpan));
+          H.Columns.Add("ScndLvl", typeof(string));
+          H.Columns.Add("Loss", typeof(int));
+          H.Columns.Add("Responsibility", typeof(string));
+
+          // Validate changes before saving
+          foreach (DataRow row in dataTable.GetChanges()?.Rows)
+          {
+              if (row.RowState == DataRowState.Modified || row.RowState == DataRowState.Added)
+              {
+                  //if (string.IsNullOrEmpty(row["Name"].ToString()))
+                  //    throw new Exception("Name cannot be empty!");
+
+                  //if (!int.TryParse(row["Age"].ToString(), out int age) || age < 0)
+                  //    throw new Exception("Invalid age!");
+              }
+          }
+          foreach (DataRow row in dataTable.Rows)
+          {
+              DataRow newRow = H.NewRow();
+
+              if (!row.IsNull("StrtTime"))
+              { newRow["StrtTime"] = row["StrtTime"]; }
+              //timeCls.ToSpanTimeFormat()
+              //timeCls.ToSpanTimeFormat()
+              if (!row.IsNull("FnshTime"))
+              { newRow["FnshTime"] = row["FnshTime"]; }
+              if (!row.IsNull("ScndLvl"))
+              { newRow["ScndLvl"] = coding.getTarmeezID(row.Field<string>("ScndLvl")); }
+              if (!row.IsNull("Loss"))
+              { newRow["Loss"] = LossesCls.GetLossId(Machine ,row.Field<string>("Loss")); }
+              if (!row.IsNull("Responsibility"))
+              { newRow["Responsibility"] = coding.getTarmeezID(row.Field<string>("Responsibility")); }
+              H.Rows.Add(newRow);
+
+          }
+
+          return _MonitoringDB.UpdateData(H);
+      }*/
+
+

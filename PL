@@ -1,0 +1,849 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Text;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using DevExpress.XtraEditors;
+using Opex_OEE.Layers.DAL;
+using DevExpress.XtraGrid.Views.Grid;
+using DevExpress.XtraGrid.Views.Base;
+using DevExpress.XtraGrid.Columns;
+using System.Globalization;
+using Opex_OEE.Layers.BL;
+using System.Reflection;
+using System.Data.SqlClient;
+
+namespace Opex_OEE.Layers.PL.Transactions
+{
+    public partial class FrmMchneInterrupt : DevExpress.XtraEditors.XtraForm
+    {
+        MachineItemsTree itemsTreeV = new MachineItemsTree();
+        MachineItemsTree MachineTree = new MachineItemsTree();
+        DailyMonitoringCls dailyMonitoringCls = new DailyMonitoringCls();
+        MonitoringDBCls myMonitoringDBCls = new MonitoringDBCls($"Server=DESKTOP-CFV71PJ; Initial Catalog = OpexOEE; Integrated Security = True" );
+        CodingClass coding = new CodingClass();
+        LossesCls LossEs = new LossesCls();
+      
+        CultureInfo ci = CultureInfo.InvariantCulture;
+       // private readonly MonitoringCls _bll;
+        private readonly BindingList<DailyMonitoringDTO> _bindingList;
+        private readonly List<DailyMonitoringDTO> _modifiedRecords;
+        private SqlConnection connection;
+        private string OperationMode = "New";
+        private int QulaityRow = 1;
+        private int Interupt_id = -1;
+        private int Performance_id = -1;
+        private int Quality_id = -1;
+        private int sheetId = 0;
+        private string mainLvl = "";
+        // string connectionString = ;
+       
+        //Controls//
+        public FrmMchneInterrupt()
+        {
+            InitializeComponent();
+            //This Line to avoid disappearing of Data in gridview cell.
+            //This Line to to Activate Navigation Buttons in gridview cell.& its Subsequances.
+            //  grdCtrl_Interupt.DataSource = new BindingList<GridRow>();
+
+
+                 
+            _bindingList = new BindingList<DailyMonitoringDTO>();
+            _modifiedRecords = new List<DailyMonitoringDTO>();
+            _bindingList.AllowNew = true;
+           //  _bindingList.ListChanged += BindingList_ListChanged;
+           
+            grdCtrl_Interupt.DataSource = _bindingList;
+            grdCntrl_Quality.DataSource = new BindingList<GridRowQuality>();
+            grdCtrl_Prformance.DataSource = new BindingList<GridRowPerfmnce>();
+          
+        }
+        private void FrmMchneInterrupt_Load(object sender, EventArgs e)
+        {
+            addImage();
+            V_MachineItem.Nodes.Add(itemsTreeV.RootNode());
+            X();
+        }
+        //**TreeView**//
+        public void addImage()
+        {
+            // Be sure that you use an appropriate escape sequence (such as the
+            // @) when specifying the location of the file.  
+
+            System.Drawing.Image Enterprise = Image.FromFile(@"D:\SoftWare\Opex-OOE\Opex-OOE\Resources\Enterprise256.PNG");
+            imageList1.Images.Add("Enterprise", Enterprise);
+
+            System.Drawing.Image Site = Image.FromFile(@"D:\SoftWare\Opex-OOE\Opex-OOE\Resources\Site256.PNG");
+            imageList1.Images.Add("Site", Site);
+
+            System.Drawing.Image Area = Image.FromFile(@"D:\SoftWare\Opex-OOE\Opex-OOE\Resources\Area256.PNG");
+            imageList1.Images.Add("Area", Area);
+
+            System.Drawing.Image Cell = Image.FromFile(@"D:\SoftWare\Opex-OOE\Opex-OOE\Resources\Cell256.PNG");
+            imageList1.Images.Add("Cell", Cell);
+
+            System.Drawing.Image Machine = Image.FromFile(@"D:\SoftWare\Opex-OOE\Opex-OOE\Resources\Machine256.PNG");
+            imageList1.Images.Add("Machine", Machine);
+        }
+        private void tV_Material_DoubleClick(object sender, EventArgs e)
+        {
+            if (V_MachineItem.SelectedNode != null && V_MachineItem.SelectedNode.Index >= 0)
+            {
+                string g = V_MachineItem.SelectedNode.Name;
+                OperationMode = "New";
+                int k = itemsTreeV.CheckItemPresent(g);
+                if (int.Equals(k, 0))
+                {
+
+                    itemsTreeV.GetSKUInfo(g);
+                    string type = itemsTreeV.NodeType;
+                    switch (type)
+                    {
+                        case "Machine":
+                            string U = V_MachineItem.SelectedNode.FullPath.Remove(0, 10);
+                            //txt_EntrPrseCde.Text = coding.CodingElement(U, "Enterprise");
+                            txt_EntrPrse.Text= coding.ElementSearch(U, "Enterprise");
+
+                            txt_SiteCde.Text = coding.CodingElement(U, "Site");
+                            txt_Site.Text = coding.ElementSearch(U, "Site");
+
+                            txt_AreaCde.Text = coding.CodingElement(U, "Area");
+                            txt_Area.Text = coding.ElementSearch(U, "Area");
+
+                            txt_CellCde.Text = coding.CodingElement(U, "Cell");
+                            txt_Cell.Text = coding.ElementSearch(U, "Cell");
+
+                            txt_MchneCde.Text = coding.CodingElement(U, "Machine");
+                            Txt_Mchne.Text = coding.ElementSearch(U, "Machine");
+                            break;
+                    }
+                }
+
+            }
+        }
+        //**
+
+        //**xtraTabControl**//
+        private void X()
+        {
+            DataTable DownTime = coding.getTarmeezTable("DownTime Losses");
+            for (int i = 0; i < DownTime.Rows.Count; i++)
+            { repositoryItemComboBox4.Items.Add(DownTime.Rows[i][0].ToString()); }
+
+            DataTable X = coding.getTarmeezTable("Responsibility");
+            for (int i = 0; i < X.Rows.Count; i++)
+            { repositoryItemComboBox7.Items.Add(X.Rows[i][0].ToString());
+              repositoryItemComboBox8.Items.Add(X.Rows[i][0].ToString()); }          
+        }
+        private void xtraTabControl1_SelectedPageChanged(object sender, DevExpress.XtraTab.TabPageChangedEventArgs e)
+        {
+            repositoryItemComboBox4.Items.Clear();
+            if (xtraTabControl1.SelectedTabPage.Equals(xtrTbPge1))
+            {
+                DataTable DownTime = coding.getTarmeezTable("DownTime Losses");
+                for (int i = 0; i < DownTime.Rows.Count; i++)
+                { repositoryItemComboBox4.Items.Add(DownTime.Rows[i][0].ToString()); }
+            }
+            if (xtraTabControl1.SelectedTabPage.Equals(xtrTbPge2))
+            {
+                repositoryItemComboBox6.Items.Clear();
+                DataTable Performance = coding.getTarmeezTable("Performance Losses");
+                for (int i = 0; i < Performance.Rows.Count; i++)
+                { repositoryItemComboBox6.Items.Add(Performance.Rows[i][0].ToString()); }
+            }
+            else if (xtraTabControl1.SelectedTabPage.Equals(xtrTbPge3))
+            {
+                repositoryItemComboBox5.Items.Clear();
+                DataTable Quality = coding.getTarmeezTable("Quality Losses");
+                for (int i = 0; i < Quality.Rows.Count; i++)
+                { repositoryItemComboBox5.Items.Add(Quality.Rows[i][0].ToString()); }
+            }
+        }
+       //**
+        //**ListVeiw DailyTask**//
+        private void PublishTasks()
+        {
+            dailyMonitoringCls.Machine_Txt = Txt_Mchne.Text;
+            DataTable DailyTask = dailyMonitoringCls.GetDailyTask(dtTmPkr_ProductionDate.Value.Date);
+
+            for (int i = 0; i < DailyTask.Rows.Count; i++)
+            {
+                ListViewItem Taskitem = new ListViewItem();
+                Taskitem.Text = dtTmPkr_ProductionDate.Value.ToString("dddd dd/MMMM/yyyy");
+                ListViewItem.ListViewSubItem PlacingStation1 = new ListViewItem.ListViewSubItem(Taskitem, itemsTreeV.GetMachinedName(DailyTask.Rows[i][1].ToString()));
+                Taskitem.SubItems.Insert(1, PlacingStation1);
+
+                ListViewItem.ListViewSubItem PlacingStation2 = new ListViewItem.ListViewSubItem(Taskitem, DailyTask.Rows[i][2].ToString());
+                Taskitem.SubItems.Insert(2, PlacingStation2);
+
+                ListViewItem.ListViewSubItem PlacingStation3 = new ListViewItem.ListViewSubItem(Taskitem, DailyTask.Rows[i][3].ToString());
+                Taskitem.SubItems.Insert(3, PlacingStation3);
+
+                ListViewItem.ListViewSubItem PlacingStation4 = new ListViewItem.ListViewSubItem(Taskitem, Convert.ToDateTime(DailyTask.Rows[i][4].ToString()).ToString("hh:mm:ss.F tt", ci));
+                Taskitem.SubItems.Insert(4, PlacingStation4);
+
+                ListViewItem.ListViewSubItem PlacingStation5 = new ListViewItem.ListViewSubItem(Taskitem, Convert.ToDateTime(DailyTask.Rows[i][5].ToString()).ToString("hh:mm:ss.F tt", ci));
+                Taskitem.SubItems.Insert(5, PlacingStation5);
+
+                ListViewItem.ListViewSubItem PlacingStation6 = new ListViewItem.ListViewSubItem(Taskitem, DailyTask.Rows[i][6].ToString());
+                Taskitem.SubItems.Insert(6, PlacingStation6);
+
+                ListViewItem.ListViewSubItem PlacingStation7 = new ListViewItem.ListViewSubItem(Taskitem, DailyTask.Rows[i][7].ToString());
+                Taskitem.SubItems.Insert(7, PlacingStation7);
+                lstVw_TasksDays.Items.Add(Taskitem);
+                AdjustColumnWidths(lstVw_TasksDays);
+            }
+        }
+        private void lstVw_Calender_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            using (StringFormat sf = new StringFormat())
+            {
+                sf.Alignment = StringAlignment.Center; // Center-align header text
+                sf.LineAlignment = StringAlignment.Center;
+
+                e.Graphics.FillRectangle(Brushes.LightGray, e.Bounds);
+                e.Graphics.DrawString(e.Header.Text, e.Font, Brushes.Black, e.Bounds, sf);
+            }
+        }
+        private void lstVw_Calender_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+            using (StringFormat sf = new StringFormat())
+            {
+                sf.Alignment = StringAlignment.Center; // Center-align cell text
+                sf.LineAlignment = StringAlignment.Center;
+
+                // Draw background (optional, handles selection/focus colors)
+                Brush backBrush = (e.Item.Selected) ? Brushes.LightBlue : Brushes.White;
+                e.Graphics.FillRectangle(backBrush, e.Bounds);
+
+                // Draw text
+                e.Graphics.DrawString(e.SubItem.Text, e.SubItem.Font, Brushes.Black, e.Bounds, sf);
+            }
+
+            // Draw focus rectangle if needed
+            e.DrawFocusRectangle(e.Bounds);
+        }
+        public void AdjustColumnWidths(ListView listView, int padding = 10)
+        {
+            // Ensure the ListView is in Details view
+            if (listView.View != View.Details)
+                return;
+
+            // Iterate through each column
+            for (int colIndex = 0; colIndex < listView.Columns.Count; colIndex++)
+            {
+                int maxWidth = 0;
+
+                // Measure the column header text width
+                using (Graphics g = listView.CreateGraphics())
+                {
+                    // Check header width
+                    int headerWidth = (int)g.MeasureString(
+                        listView.Columns[colIndex].Text,
+                        listView.Font
+                    ).Width;
+                    maxWidth = headerWidth;
+
+                    // Check all item/subitem text widths in the column
+                    foreach (ListViewItem item in listView.Items)
+                    {
+                        string text = (colIndex == 0) ? item.Text : item.SubItems[colIndex].Text;
+                        int textWidth = (int)g.MeasureString(text, listView.Font).Width;
+
+                        if (textWidth > maxWidth)
+                            maxWidth = textWidth;
+                    }
+                }
+
+                // Set column width with padding
+                listView.Columns[colIndex].Width = maxWidth + padding;
+            }
+        }
+        private void lstVw_TasksDays_ItemCheck(object sender, ItemCheckEventArgs e)
+        {
+            txtBx_Task.Text = lstVw_TasksDays.FocusedItem.SubItems[2].Text;
+            txtBx_IdlCycleTime.Text = lstVw_TasksDays.FocusedItem.SubItems[3].Text;
+            txtBx_PrdctQnty.Text = lstVw_TasksDays.FocusedItem.SubItems[6].Text;
+            tmeEdt_Strt.EditValue = lstVw_TasksDays.FocusedItem.SubItems[4].Text;
+            tmeEdt_End.EditValue = lstVw_TasksDays.FocusedItem.SubItems[5].Text;
+            txt_NoEmplye.Text = lstVw_TasksDays.FocusedItem.SubItems[7].Text;
+            DataTable DataTable_id = dailyMonitoringCls.GetDailyTaskid(lstVw_TasksDays.FocusedItem.SubItems[2].Text,Convert.ToDateTime(lstVw_TasksDays.FocusedItem.Text), lstVw_TasksDays.FocusedItem.SubItems[1].Text);
+            
+            for (int i = 0; i < DataTable_id.Rows.Count; i++)
+            {
+                OperationMode = "Update";
+                sheetId = Convert.ToInt32(DataTable_id.Rows[i][0]); mainLvl = "DownTime Losses";
+                //A_Intrrupt(Convert.ToInt32(DataTable_id.Rows[i][0]), lstVw_TasksDays.FocusedItem.SubItems[1].Text, "DownTime Losses");
+                LoadData();
+                // A_Performance(DataTable_id.Rows[i][0].ToString(), lstVw_TasksDays.FocusedItem.SubItems[1].Text, "Performance Losses");
+                // A_Quality(DataTable_id.Rows[i][0].ToString(), lstVw_TasksDays.FocusedItem.SubItems[1].Text, "Quality Losses");
+            }
+        }
+     
+        //**Control Buttons**//
+        private void btn_Svesht_Click(object sender, EventArgs e)
+        {
+            if(string.Equals(OperationMode, "New"))
+            { sheetId = TaskData(); }
+            
+            //iterrupt_info(X.ToString());
+            // Quality_info(X.ToString());
+            // Performance_info(X.ToString());
+             Save();
+        }
+        private void Btn_OpnSht_Click(object sender, EventArgs e)
+        {
+            lstVw_TasksDays.Items.Clear();
+            PublishTasks();
+        }
+    
+        //grdCntrl_Performance//
+        public class GridRowPerfmnce
+        {
+            //Performance
+            public DateTime Col_StrtTmePerfmnce { get; set; }
+            public DateTime Col_EndTmePerfmnce { get; set; }
+            public string Col_LossPerfmnce { get; set; }
+            public string Col_2ndLvlLossPerfmnce { get; set; }
+            public string Col_Respons_Perfmnce { get; set; }
+             
+        }
+        private void grdVw_performance_CellValueChanged(object sender, CellValueChangedEventArgs e)
+        {
+            if (string.Equals(e.Column.Name, "Col_EndTme"))
+            {
+                try
+                {
+                    var valueEnd = gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["Col_EndTme"]);
+                    var valueStrt = gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["Col_StrtTme"]);
+                    int X = DateTime.Compare(Convert.ToDateTime(valueStrt), Convert.ToDateTime(valueEnd));
+                    if (int.Equals(X, 1))
+                    {
+                        MessageBox.Show("The End Time Must be less than Start Time");
+                        //   gridView_Interupts.SetRowCellValue(gridView_Interupts.FocusedRowHandle, gridView_Interupts.Columns["Col_EndTme"], valueStrt);
+                        gridView_Interupts.SetFocusedValue(valueStrt);
+
+
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Console.Write(exception.Message);
+                }
+            }
+            try
+            {
+                ColumnView view = (ColumnView)sender;
+                if (view.FocusedColumn.FieldName == "Col_2ndLvlLossPerfmnce")
+                {
+                    repositoryItemComboBox2.Items.Clear();
+
+                    var cellvalue = grdVw_performance.GetFocusedRowCellValue("Col_2ndLvlLossPerfmnce");
+
+                    DataTable PMTaskTable = LossEs.GetMachineLossInfo(Txt_Mchne.Text, cellvalue.ToString());
+                    MessageBox.Show(Txt_Mchne.Text+"----"+ cellvalue.ToString());
+                    for (int j = 0; j < PMTaskTable.Rows.Count; j++)
+                    {
+                        repositoryItemComboBox2.Items.Add(PMTaskTable.Rows[j][0].ToString());
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                repositoryItemComboBox2.Items.Clear();
+
+                MessageBox.Show("Loss not Found");
+            }
+
+        }
+        private void Performance_info(string Taskid)
+        {
+            for (int i = 0; i < grdVw_performance.RowCount; i++)
+            {
+                dailyMonitoringCls.StrtTime_In = grdVw_performance.GetRowCellValue(i, grdVw_performance.Columns["Col_StrtTmePerfmnce"]);
+                dailyMonitoringCls.FnshTime_In = grdVw_performance.GetRowCellValue(i, grdVw_performance.Columns["Col_EndTmePerfmnce"]);
+
+                dailyMonitoringCls.DaliyTaskid = Taskid;
+                dailyMonitoringCls.MainLvl_Txt = "Performance Losses";
+                dailyMonitoringCls.ScndLvl_Txt = grdVw_performance.GetRowCellValue(i, grdVw_performance.Columns["Col_2ndLvlLossPerfmnce"]).ToString();
+                dailyMonitoringCls.Loss_Txt = grdVw_performance.GetRowCellValue(i, grdVw_performance.Columns["Col_LossPerfmnce"]).ToString();
+                dailyMonitoringCls.FollowUpDate = dtTmPkr_ProductionDate.Value.Date;
+                dailyMonitoringCls.Responsibility_Txt= grdVw_performance.GetRowCellValue(i, grdVw_performance.Columns["Col_Respons_Perfmnce"]).ToString();
+                dailyMonitoringCls.AddDailyMonitoring();
+            }
+        }
+        private void A_Performance(string sheetId, string Machine,string MainLoss)
+        {
+            dailyMonitoringCls.Machine_Txt = Machine;
+            DataTable Z = dailyMonitoringCls.GetDailyTaskInfo(sheetId, MainLoss);
+            for (int j = 0; j < Z.Rows.Count; j++)
+            {
+                Performance_id = Convert.ToInt32(Z.Rows[j][0]);
+                grdVw_performance.AddNewRow();
+            }
+        }
+        private void grdVw_performance_InitNewRow(object sender, DevExpress.XtraGrid.Views.Grid.InitNewRowEventArgs e)
+        {
+            dailyMonitoringCls.defalut_Out();
+            GridView view = sender as GridView;
+            DataTable G = dailyMonitoringCls.GetDailyInterruptInfo(Performance_id.ToString());
+           // DataTable G = new OEECalCls().DwTimeTbl(T);
+            for (int f = 0; f < G.Rows.Count; f++)
+            {
+                view.SetRowCellValue(e.RowHandle, view.Columns[0], G.Rows[f][1]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[1], G.Rows[f][2]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[2], G.Rows[f][3]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[3], G.Rows[f][4]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[4], G.Rows[f][5]);
+            }
+            Performance_id = -1;
+
+        }
+        private void grdVw_performance_ValidateRow(object sender, ValidateRowEventArgs e)
+        {
+            ColumnView view = sender as ColumnView;
+            GridColumn colum_2ndLvl = view.Columns["Col_2ndLvlLossPerfmnce"];
+            GridColumn colum_Loss = view.Columns["Col_LossPerfmnce"];
+            GridColumn Col_Respons_Prfrmnce = view.Columns["Col_Respons_Perfmnce"];
+            GridColumn colum_EndTime = view.Columns["Col_EndTmePerfmnce"];
+
+            if (string.IsNullOrEmpty(Txt_Mchne.Text))
+            {
+                MessageBox.Show("Please Enter The Machine", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                Txt_Mchne.Focus();
+            }
+            else
+            {
+
+                try
+                {
+                    var valueEnd = grdVw_performance.GetRowCellValue(e.RowHandle, grdVw_performance.Columns["Col_EndTmePerfmnce"]);
+                    var valueStrt = grdVw_performance.GetRowCellValue(e.RowHandle, grdVw_performance.Columns["Col_StrtTmePerfmnce"]);
+                    int X = DateTime.Compare(Convert.ToDateTime(valueStrt), Convert.ToDateTime(valueEnd));
+                    if (int.Equals(X, 1))
+                    {
+                        e.Valid = false;
+                        e.ErrorText = "Error!!!";
+
+                        view.FocusedRowHandle = e.RowHandle;
+                        view.FocusedColumn = colum_EndTime;
+                        view.ShowEditor();
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Console.Write(exception.Message);
+                }
+
+                if (grdVw_performance.GetRowCellValue(e.RowHandle, grdVw_performance.Columns["Col_2ndLvlLossPerfmnce"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_2ndLvl;
+                    view.ShowEditor();
+                }
+                if (grdVw_performance.GetRowCellValue(e.RowHandle, grdVw_performance.Columns["Col_LossPerfmnce"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_Loss;
+                    view.ShowEditor();
+                }
+                if (grdVw_performance.GetRowCellValue(e.RowHandle, grdVw_performance.Columns["Col_Respons_Perfmnce"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = Col_Respons_Prfrmnce;
+                    view.ShowEditor();
+                }
+            }
+        }
+        //**
+
+        //grdCntrl_Quality//
+        public class GridRowQuality
+        {
+            //Quality
+            public string Col_2ndLvlQuality { get; set; }
+            public string Col_LossQuality { get; set; }
+            public int Col_QntyQuality { get; set; }
+        }
+        private void grdVw_Quality_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            try
+            {
+                ColumnView view = (ColumnView)sender;
+                if (view.FocusedColumn.FieldName == "Col_2ndLvlQuality")
+                {
+                    repositoryItemComboBox3.Items.Clear();
+                    var cellvalue = grdVw_Quality.GetFocusedRowCellValue("Col_2ndLvlQuality");
+                    //grdVw_Quality.GetRowCellValue(QulaityRow, grdVw_Quality.Columns[);
+                    DataTable PMTaskTable = LossEs.GetMachineLossInfo(Txt_Mchne.Text, cellvalue.ToString());
+                    for (int j = 0; j < PMTaskTable.Rows.Count; j++)
+                    {
+                        repositoryItemComboBox3.Items.Add(PMTaskTable.Rows[j][0].ToString());
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                repositoryItemComboBox3.Items.Clear();
+
+                MessageBox.Show("No Loss");
+
+            }
+        }
+        private void grdVw_Quality_CustomDrawRowIndicator(object sender, RowIndicatorCustomDrawEventArgs e)
+        {
+            if (e.RowHandle >= 0)
+            {
+                e.Info.DisplayText = (e.RowHandle + 1).ToString();
+                QulaityRow = e.RowHandle + 1;
+            }
+        }
+        private int TaskData()
+        {
+            int X = 0;
+            if (string.IsNullOrEmpty(txt_NoEmplye.Text))
+            {
+                MessageBox.Show("Please Enter Empolyee count", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                txt_NoEmplye.Focus();
+            }         
+            else if(string.IsNullOrEmpty(txtBx_Task.Text))
+            {
+                MessageBox.Show("Please Enter Task", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                txtBx_Task.Focus();
+            }
+            else if (string.IsNullOrEmpty(txtBx_IdlCycleTime.Text))
+            {
+                MessageBox.Show("Please Enter Cycle Time", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                txtBx_IdlCycleTime.Focus();
+            }
+            else if (string.IsNullOrEmpty(txtBx_PrdctQnty.Text))
+            {
+                MessageBox.Show("Please Enter production Quantity", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                txtBx_PrdctQnty.Focus();
+            }
+            else
+            {            
+            X = dailyMonitoringCls.TaskID();
+            DateTime DT = new DateTime();
+            DateTime TaskEnd = new DateTime();
+            dailyMonitoringCls.NoEmpolyee =Convert.ToInt32(txt_NoEmplye.Text);
+            dailyMonitoringCls.TaskStrtTime = tmeEdt_Strt.EditValue;
+            dailyMonitoringCls.TaskEndTime = tmeEdt_End.EditValue;
+            dailyMonitoringCls.DaliyTaskid = X.ToString();
+            dailyMonitoringCls.Machine_Txt = Txt_Mchne.Text;
+            dailyMonitoringCls.Task = txtBx_Task.Text;
+            dailyMonitoringCls.CycleTime = Convert.ToInt32(txtBx_IdlCycleTime.Text);
+            dailyMonitoringCls.PrdctionQntity = Convert.ToInt32(txtBx_PrdctQnty.Text);
+            dailyMonitoringCls.FollowUpDate = dtTmPkr_ProductionDate.Value.Date;
+            dailyMonitoringCls.AddDailyTask(X);
+            }
+            return X;
+        }
+        private void Quality_info(string Taskid)
+        {
+            for (int i = 0; i < grdVw_Quality.RowCount; i++)
+            {
+                dailyMonitoringCls.MainLvl_Txt = "Quality Losses";
+                dailyMonitoringCls.DaliyTaskid = Taskid;
+                dailyMonitoringCls.ScndLvl_Txt = grdVw_Quality.GetRowCellValue(i, grdVw_Quality.Columns["Col_2ndLvlQuality"]).ToString();
+                dailyMonitoringCls.Loss_Txt = grdVw_Quality.GetRowCellValue(i, grdVw_Quality.Columns["Col_LossQuality"]).ToString();
+                dailyMonitoringCls.ScrapQntity = Convert.ToInt32(grdVw_Quality.GetRowCellValue(i, grdVw_Quality.Columns["Col_QntyQuality"]));
+                dailyMonitoringCls.FollowUpDate = dtTmPkr_ProductionDate.Value.Date;
+                dailyMonitoringCls.AddDailyMonitoring();
+            }
+        }
+        private void A_Quality(string sheetId, string Machine,string MainLoss)
+        {
+            dailyMonitoringCls.Machine_Txt = Machine;
+            DataTable Z = dailyMonitoringCls.GetDailyTaskInfo(sheetId,MainLoss);
+            for (int j = 0; j < Z.Rows.Count; j++)
+            {
+                Quality_id = Convert.ToInt32(Z.Rows[j][0]);
+                grdVw_Quality.AddNewRow();
+            }
+        }
+        private void grdVw_Quality_InitNewRow(object sender, DevExpress.XtraGrid.Views.Grid.InitNewRowEventArgs e)
+        {
+            dailyMonitoringCls.defalut_Out();
+            GridView view = sender as GridView;
+            try
+            { 
+            DataTable G= dailyMonitoringCls.GetDailyQualityInfo(Quality_id.ToString());
+         
+            for (int f = 0; f < G.Rows.Count; f++)
+            {
+                view.SetRowCellValue(e.RowHandle, view.Columns[0], G.Rows[f][1]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[1], G.Rows[f][2]);
+                view.SetRowCellValue(e.RowHandle, view.Columns[2], G.Rows[f][3]);
+            }
+            Quality_id = -1;
+            }
+            catch(Exception ex)
+            {
+
+            }
+
+        }
+        private void grdVw_Quality_ValidateRow(object sender, ValidateRowEventArgs e)
+        {
+            ColumnView view = sender as ColumnView;
+            GridColumn colum_2ndLvl = view.Columns["Col_2ndLvlQuality"];
+            GridColumn colum_Loss = view.Columns["Col_LossQuality"];
+            GridColumn colum_Quantity = view.Columns["Col_QntyQuality"];
+
+
+            if (string.IsNullOrEmpty(Txt_Mchne.Text))
+            {
+                MessageBox.Show("Please Enter The Machine", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                Txt_Mchne.Focus();
+            }
+            else
+            {
+
+                if (grdVw_Quality.GetRowCellValue(e.RowHandle, grdVw_Quality.Columns["Col_2ndLvlQuality"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_2ndLvl;
+                    view.ShowEditor();
+                }
+                if (grdVw_Quality.GetRowCellValue(e.RowHandle, grdVw_Quality.Columns["Col_LossQuality"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_Loss;
+                    view.ShowEditor();
+                }
+                if (grdVw_Quality.GetRowCellValue(e.RowHandle, grdVw_Quality.Columns["Col_QntyQuality"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_Quantity;
+                    view.ShowEditor();
+                }
+            }
+        }
+        //**
+
+        //gCrl_Interupt// 
+        //**
+        
+              
+        //** GridView Events & Validation**//
+        private void gridView_Interupts_CustomDrawRowIndicator(object sender, DevExpress.XtraGrid.Views.Grid.RowIndicatorCustomDrawEventArgs e)
+        {
+            if (e.RowHandle >= 0)
+            {
+                e.Info.DisplayText = (e.RowHandle + 1).ToString();
+            }
+        }
+        private void gridView_Interupts_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            var row = gridView_Interupts.GetRow(e.RowHandle) as DailyMonitoringDTO;
+            if (row != null)
+            {
+                row.RowState = DataRowState.Modified;
+                if (!_modifiedRecords.Contains(row))
+                {
+                    _modifiedRecords.Add(row);
+                }
+            }
+            try
+            {
+                ColumnView view = (ColumnView)sender;
+                if (view.FocusedColumn.FieldName == "ScndLvl")
+                {
+                    repositoryItemComboBox1.Items.Clear();
+
+                    var cellvalue = gridView_Interupts.GetFocusedRowCellValue("ScndLvl");
+
+                    DataTable PMTaskTable = LossEs.GetMachineLossInfo(Txt_Mchne.Text, cellvalue.ToString());
+                    for (int j = 0; j < PMTaskTable.Rows.Count; j++)
+                    {
+                        repositoryItemComboBox1.Items.Add(PMTaskTable.Rows[j][0].ToString());
+                    }
+                }
+
+              
+            }
+            catch (Exception ex)
+            {
+                repositoryItemComboBox1.Items.Clear();
+
+                MessageBox.Show("Loss not Found");
+            }
+        }
+        private void gridView_Interupts_ValidateRow(object sender, ValidateRowEventArgs e)
+        {
+            ColumnView view = sender as ColumnView;
+            GridColumn colum_2ndLvl = view.Columns["ScndLvl"];
+            GridColumn colum_Loss = view.Columns["Loss"];
+            GridColumn colum_Respons_DT = view.Columns["Responsibility"];
+            GridColumn colum_EndTime = view.Columns["FnshTime"];
+
+            if (string.IsNullOrEmpty(Txt_Mchne.Text))
+            {
+                MessageBox.Show("Please Enter The Machine", "Error", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                Txt_Mchne.Focus();
+            }
+            else
+            {
+
+                try
+                {
+                    var valueEnd = gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["FnshTime"]);
+                    var valueStrt = gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["StrtTime"]);
+                    int X = DateTime.Compare(Convert.ToDateTime(valueStrt), Convert.ToDateTime(valueEnd));
+                    if (int.Equals(X, 1))
+                    {
+                        e.Valid = false;
+                        e.ErrorText = "Error!!!";
+
+                        view.FocusedRowHandle = e.RowHandle;
+                        view.FocusedColumn = colum_EndTime;
+                        view.ShowEditor();
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Console.Write(exception.Message);
+                }
+
+                if (gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["ScndLvl"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_2ndLvl;
+                    view.ShowEditor();
+                }
+                if (gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["Loss"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_Loss;
+                    view.ShowEditor();
+                }
+                if (gridView_Interupts.GetRowCellValue(e.RowHandle, gridView_Interupts.Columns["Responsibility"]) == null)
+                {
+                    e.Valid = false;
+                    e.ErrorText = "Error!!!";
+
+                    view.FocusedRowHandle = e.RowHandle;
+                    view.FocusedColumn = colum_Respons_DT;
+                    view.ShowEditor();
+                }
+            }
+        }
+        private void gridView_Interupts_RowDeleting(object sender, DevExpress.Data.RowDeletingEventArgs e)
+        {            
+            var itemToDelete = gridView_Interupts.GetRow(e.RowHandle) as DailyMonitoringDTO;
+            // var row = e.Row as DailyMonitoringDTO;
+            if (itemToDelete != null)
+            {
+                try
+                {              
+                    if (itemToDelete != null)
+                    {
+                        itemToDelete.RowState = DataRowState.Deleted;
+                        _modifiedRecords.Add(itemToDelete);
+                    }
+                }
+                catch (BLLException ex)
+                {                   
+                }
+            }
+        }
+        //**Retrieve Data**//
+        private void LoadData()
+        {
+            _bindingList.RaiseListChangedEvents = false;
+            try
+            {
+               MonitoringCls _bll = new MonitoringCls(sheetId, mainLvl,Txt_Mchne.Text, dtTmPkr_ProductionDate.Value.Date);
+               List<DailyMonitoringDTO> records = _bll.GetAllRecords();
+               _bindingList.Clear();
+        
+                foreach (var record in records)
+                {
+                  _bindingList.Add(record);
+                }
+                
+                _modifiedRecords.Clear();
+                
+            }
+            catch (BLLException ex)
+            {
+               MessageBox.Show($"Error loading data: {ex.Message}", "Error",MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                
+                // Re-enable ListChanged events after loading
+                _bindingList.RaiseListChangedEvents = true;
+
+                // Manually refresh the grid if needed
+                gridView_Interupts.RefreshData();
+            }
+        }
+        //**Bulid DTO**//
+       private void Save()
+        {
+            try
+            {
+                MonitoringCls _bll = new MonitoringCls(sheetId, mainLvl, Txt_Mchne.Text, dtTmPkr_ProductionDate.Value.Date);
+                // Add new rows to modified records
+                foreach (var item in _bindingList)
+                {
+                    if (item.id == 0) // New record
+                    {
+                        item.RowState = DataRowState.Added;
+                        if (!_modifiedRecords.Contains(item))
+                        {
+                            _modifiedRecords.Add(item);
+                        }
+                    }
+                }
+                if (_modifiedRecords.Count > 0)
+                {
+                    _bll.SaveChanges(_modifiedRecords);
+                    MessageBox.Show($"Successfully saved records.", "Success",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    LoadData(); // Refresh data
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving changes: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+
+        }
+
+        
+    }
+}
